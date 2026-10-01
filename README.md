@@ -320,6 +320,11 @@ reports `idle`, `off`, `paused`, or `standby`, or after 90 seconds if the
 player never leaves its current state. Players that keep reporting `playing`
 during an announcement use that 90 second limit.
 
+If the player is already `unavailable` or `unknown`, the device does not wait.
+If it never reports `playing` or `buffering`, the device stops waiting after
+`external_speaker_start_timeout` (10 seconds by default). Wake words work again
+after that. Override the substitution when text to speech takes longer to start.
+
 ---
 
 ## LED effects

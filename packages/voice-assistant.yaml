@@ -22,6 +22,10 @@ substitutions:
   factory_reset_cancelled_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/factory_reset_cancelled.mp3
   factory_reset_confirmed_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/factory_reset_confirmed.mp3
   error_cloud_expired_sound_file: https://github.com/esphome/home-assistant-voice-pe/raw/dev/sounds/error_cloud_expired.mp3
+  # Give up if the player never reports playing/buffering. Override when TTS
+  # takes longer than this to start. The 90s watchdog still covers a player
+  # that starts and then never reports idle.
+  external_speaker_start_timeout: 10s
 
 switch:
   # Mute Sound Switch.
@@ -104,8 +108,17 @@ text_sensor:
     on_value:
       - lambda: |-
           if (!id(external_playback_active)) return;
+          if (x == "unavailable" || x == "unknown") {
+            ESP_LOGW("external_speaker", "External speaker not reachable (%s)", x.c_str());
+            id(external_playback_active) = false;
+            id(external_playback_seen_active) = false;
+            id(clear_playback_flag_later).stop();
+            id(abort_if_speaker_never_starts).stop();
+            return;
+          }
           if (x == "playing" || x == "buffering") {
             id(external_playback_seen_active) = true;
+            id(abort_if_speaker_never_starts).stop();
             return;
           }
           if (!id(external_playback_seen_active)) return;
@@ -113,6 +126,7 @@ text_sensor:
             id(external_playback_active) = false;
             id(external_playback_seen_active) = false;
             id(clear_playback_flag_later).stop();
+            id(abort_if_speaker_never_starts).stop();
           }
 
 sensor:
@@ -382,6 +396,22 @@ script:
           id(external_playback_active) = false;
           id(external_playback_seen_active) = false;
 
+  # Gives up when playback never starts. A player that does start still uses
+  # the 90s watchdog above. Started with execute() so the caller does not wait.
+  - id: abort_if_speaker_never_starts
+    mode: restart
+    then:
+      - delay: ${external_speaker_start_timeout}
+      - if:
+          condition:
+            lambda: return id(external_playback_active) && !id(external_playback_seen_active);
+          then:
+            - lambda: |-
+                ESP_LOGW("external_speaker", "External speaker did not start playback");
+                id(external_playback_active) = false;
+                id(external_playback_seen_active) = false;
+                id(clear_playback_flag_later).stop();
+
   # Play a URL on the configured Home Assistant media player.
   - id: play_on_external_speaker
     parameters:
@@ -391,16 +421,26 @@ script:
           condition:
             lambda: return !url.empty();
           then:
-            - lambda: |-
-                id(external_playback_seen_active) = false;
-                id(external_playback_active) = true;
-                id(clear_playback_flag_later).execute();
-            - homeassistant.action:
-                action: media_player.play_media
-                data:
-                  entity_id: ${external_speaker}
-                  media_content_id: !lambda 'return url;'
-                  media_content_type: music
+            - if:
+                condition:
+                  lambda: |-
+                    auto state = id(external_speaker_state).state;
+                    return state == "unavailable" || state == "unknown";
+                then:
+                  - lambda: |-
+                      ESP_LOGW("external_speaker", "External speaker not reachable (%s)", id(external_speaker_state).state.c_str());
+                else:
+                  - lambda: |-
+                      id(external_playback_seen_active) = false;
+                      id(external_playback_active) = true;
+                      id(clear_playback_flag_later).execute();
+                      id(abort_if_speaker_never_starts).execute();
+                  - homeassistant.action:
+                      action: media_player.play_media
+                      data:
+                        entity_id: ${external_speaker}
+                        media_content_id: !lambda 'return url;'
+                        media_content_type: music
 
   # Stop whatever the external speaker is announcing.
   - id: stop_external_speaker
@@ -413,6 +453,7 @@ script:
           id(external_playback_active) = false;
           id(external_playback_seen_active) = false;
           id(clear_playback_flag_later).stop();
+          id(abort_if_speaker_never_starts).stop();
 
   # Play one of the named notification sounds on the external speaker.
   # priority stops the current sound first. Otherwise a sound that is already
