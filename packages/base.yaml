@@ -25,6 +25,11 @@ substitutions:
   hidden_ssid: "false"
   log_level: INFO
 
+  # --- External speaker ----------------------------------------------------
+  # Home Assistant media_player that plays TTS and the notification sounds.
+  # Override this in the device configuration with your own entity id.
+  external_speaker: media_player.wohnzimmer
+
   # --- Voice assistant phases ----------------------------------------------
   # The voice assistant is ready to be triggered by a wake word
   voice_assist_idle_phase_id: '1'
@@ -173,7 +178,7 @@ i2c:
 psram:
   mode: octal
   speed: 80MHz
-  ignore_not_found: false  # The VPE has PSRAM, so this is safe. Allows configuring WiFi driver to use more resources (done automatically by the speaker media player)
+  ignore_not_found: false  # This board has PSRAM. microWakeWord uses it for the model.
 
 
 globals:
@@ -211,7 +216,6 @@ external_components:
       ref: ${respeaker_ref}
     components:
       - respeaker_xvf3800
-      - aic3104
     refresh: 0s
 
 select:

@@ -12,6 +12,9 @@ substitutions:
   name: respeaker-xvf3800-assistant
   friendly_name: reSpeaker XVF3800 Assistant
 
+  # Home Assistant media_player that plays TTS and notification sounds.
+  external_speaker: media_player.wohnzimmer
+
   # Ref of this repository. It selects the YAML packages below, the C++
   # components, and the DFU firmware.
   #

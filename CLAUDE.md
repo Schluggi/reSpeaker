@@ -8,8 +8,8 @@ External ESPHome components plus an example device config that turn a **Respeake
 
 Layout:
 - `esphome/components/respeaker_xvf3800/` — I2C driver for the XMOS DSP (mute, LED ring, beam direction, beam lock, DFU firmware update).
-- `esphome/components/aic3104/` — `audio_dac` platform for the TLV320AIC3104 codec.
-- `packages/` — the ESPHome packages consumers pull over `packages:`. This is the source of truth for device config: `base.yaml` (core/network/api/external_components), `hardware.yaml` (I2S, speaker, DSP, codec, DFU), `voice-assistant.yaml` (mWW, pipeline, media player), `leds.yaml` (all LED effect scripts), `timers-alarm.yaml` (time, alarm, timers).
+- `esphome/components/aic3104/` — `audio_dac` platform for the TLV320AIC3104 codec. The packages leave it unloaded. Playback uses a Home Assistant media player (`external_speaker`).
+- `packages/` — the ESPHome packages consumers pull over `packages:`. This is the source of truth for device config: `base.yaml` (core/network/api/external_components), `hardware.yaml` (I2S microphone, DSP, DFU), `voice-assistant.yaml` (mWW, pipeline, external speaker playback), `leds.yaml` (all LED effect scripts), `timers-alarm.yaml` (time, alarm, timers).
 - `config/respeaker-xvf-satellite-example.yaml` — thin (~47 line) consumer example. It only sets substitutions and the secret-bearing `wifi:`/`api:`/`ota:` blocks.
 - `application_xvf3800_inthost-lr48-sqr-i2c-v1.0.7-release.bin` — XMOS firmware image, served over raw GitHub URL and flashed by the component's DFU code.
 - `ha/` — Home Assistant script snippet that calls the device's `set_led_color` API action.

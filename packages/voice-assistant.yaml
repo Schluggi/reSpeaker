@@ -1,8 +1,9 @@
 # =============================================================================
 # Respeaker XVF3800 satellite — voice assistant package
 #
-# Wake word detection, the Home Assistant voice pipeline, the media player
-# chain, and the notification sounds.
+# Wake word detection, the Home Assistant voice pipeline, and playback of
+# TTS plus notification sounds on the external Home Assistant media player
+# (${external_speaker}). There is no local speaker.
 #
 # The sound URLs are substitutions. Override any of them to use your own files.
 # =============================================================================
@@ -82,89 +83,65 @@ select:
           id(hey_mycroft).set_probability_cutoff(237);  // 0.93 -> 1.878 FAPH on DipCo
         }
 
-audio_file:
-  - id: mute_switch_on_sound
-    file: ${mute_switch_on_sound_file}
-  - id: mute_switch_off_sound
-    file: ${mute_switch_off_sound_file}
-  - id: timer_finished_sound
-    file: ${timer_finished_sound_file}
-  - id: wake_word_triggered_sound
-    file: ${wake_word_triggered_sound_file}
-  - id: error_cloud_expired
-    file: ${error_cloud_expired_sound_file}
+globals:
+  # True while a sound we started should still be playing on the external speaker.
+  - id: external_playback_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  # Set once the player reports playing/buffering, so a stale idle state cannot
+  # clear the flag before playback has actually started.
+  - id: external_playback_seen_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
-media_source:
-  - platform: audio_file
-    id: audio_file_announcement_source
-  - platform: audio_http
-    id: http_announcement_source
-    buffer_size: 250000
-  - platform: audio_http
-    id: http_media_source
-    buffer_size: 500000
-  - platform: sendspin
-    id: sendspin_media_source
-    codecs: [FLAC, PCM]  # Prefer FLAC for Sendspin
-    fixed_delay: 480 microseconds  # The AIC3204 DAC used, as configured, on the VPE delays audio by 480 microseconds
+text_sensor:
+  - platform: homeassistant
+    id: external_speaker_state
+    entity_id: ${external_speaker}
+    internal: true
+    on_value:
+      - lambda: |-
+          if (!id(external_playback_active)) return;
+          if (x == "playing" || x == "buffering") {
+            id(external_playback_seen_active) = true;
+            return;
+          }
+          if (!id(external_playback_seen_active)) return;
+          if (x == "idle" || x == "off" || x == "paused" || x == "standby") {
+            id(external_playback_active) = false;
+            id(external_playback_seen_active) = false;
+            id(clear_playback_flag_later).stop();
+          }
 
-media_player:
-  - platform: sendspin
-    id: sendspin_group_media_player
-  - platform: speaker_source
-    id: external_media_player
-    name: Media Player
-    announcement_pipeline:
-      format: FLAC     # FLAC is the least processor intensive codec
-      num_channels: 1  # Stereo audio is unnecessary for announcements
-      sample_rate: 48000
-      speaker: announcement_resampling_speaker
-      sources:
-        - audio_file_announcement_source
-        - http_announcement_source
-    media_pipeline:
-      format: FLAC     # FLAC is the least processor intensive codec
-      num_channels: 2
-      sample_rate: 48000
-      speaker: media_resampling_speaker
-      sources:
-        - http_media_source
-        - sendspin_media_source
-    volume_increment: 0.05
-    volume_min: 0.0
-    volume_max: 1.0
-    on_mute:
-      - delay: 100ms  # Debounce
-      - script.execute: control_leds_volume_changed
-    on_unmute:
-      - delay: 100ms  # Debounce
-      - script.execute: control_leds_volume_changed
-    on_volume:
-      if:
-        condition:
-          - lambda: return !id(init_in_progress);
-        then:
-          - delay: 100ms  # Debounce
-          - script.execute: control_leds_volume_changed
-    on_announcement:
-      - mixer_speaker.apply_ducking:
-          id: media_mixing_input
-          decibel_reduction: 20
-          duration: 0.0s
+sensor:
+  - platform: homeassistant
+    id: external_speaker_volume
+    entity_id: ${external_speaker}
+    attribute: volume_level
+    internal: true
+    on_value:
+      - if:
+          condition:
+            lambda: return !id(init_in_progress);
+          then:
+            - delay: 100ms
+            - script.execute: control_leds_volume_changed
+
+binary_sensor:
+  - platform: homeassistant
+    id: external_speaker_muted
+    entity_id: ${external_speaker}
+    attribute: is_volume_muted
+    internal: true
     on_state:
-      if:
-        condition:
-          and:
-            - switch.is_off: timer_ringing
-            - not:
-                voice_assistant.is_running:
-            - not:
-                media_player.is_announcing: external_media_player
-        then:
-          - mixer_speaker.apply_ducking:
-              id: media_mixing_input
-              decibel_reduction: 0
-              duration: 1.0s
+      - if:
+          condition:
+            lambda: return !id(init_in_progress);
+          then:
+            - delay: 100ms
+            - script.execute: control_leds_volume_changed
 
 micro_wake_word:
   id: mww
@@ -210,16 +187,19 @@ micro_wake_word:
                       voice_assistant.is_running:
                     then:
                       voice_assistant.stop:
-                    # Stop any other media player announcement
                     else:
+                      # The external speaker is not in the XVF3800 echo reference.
+                      # While it plays, ignore wake words so the reply is not heard
+                      # as a new command. "stop" cancels that playback.
                       - if:
                           condition:
-                            media_player.is_announcing:
-                              id: external_media_player
+                            lambda: return id(external_playback_active);
                           then:
-                            - media_player.stop:
-                                announcement: true
-                                id: external_media_player
+                            - if:
+                                condition:
+                                  lambda: 'return wake_word == "stop" || wake_word == "Stop";'
+                                then:
+                                  - script.execute: stop_external_speaker
                           # Start the voice assistant and play the wake sound, if enabled
                           else:
                             - if:
@@ -247,7 +227,6 @@ voice_assistant:
   microphone:
     microphone: i2s_mics
     channels: 0
-  media_player: external_media_player
   micro_wake_word: mww
   use_wake_word: false
   noise_suppression_level: 0
@@ -280,7 +259,7 @@ voice_assistant:
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_error_phase_id};
           - script.execute: control_leds
-    # If the error code is cloud-auth-failed, serve a local audio file guiding the user.
+    # If the error code is cloud-auth-failed, play the guidance sound on the external speaker.
     - if:
         condition:
           - lambda: return code == "cloud-auth-failed";
@@ -289,12 +268,6 @@ voice_assistant:
               id: play_sound
               priority: true
               sound_file: "error_cloud_expired"
-  # When the voice assistant starts: Play a wake up sound, duck audio.
-  on_start:
-    - mixer_speaker.apply_ducking:
-        id: media_mixing_input
-        decibel_reduction: 20  # Number of dB quieter; higher implies more quiet, 0 implies full volume
-        duration: 0.0s  # The duration of the transition (default is no transition)
   on_listening:
     - lambda: id(voice_assistant_phase) = ${voice_assist_waiting_for_command_phase_id};
     - script.execute: control_leds
@@ -310,27 +283,28 @@ voice_assistant:
   on_intent_progress:
     - if:
         condition:
-          # A nonempty x variable means a streaming TTS url was sent to the media player
+          # Without a local media player this URL stays empty. The replying
+          # phase is set from on_tts_start instead.
           lambda: 'return !x.empty();'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
           - script.execute: control_leds
-          # Start a script that would potentially enable the stop word if the response is longer than a second
-          - script.execute: activate_stop_word_once
   on_tts_start:
     - if:
         condition:
-          # The intent_progress trigger didn't start the TTS Reponse
           lambda: 'return id(voice_assistant_phase) != ${voice_assist_replying_phase_id};'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
           - script.execute: control_leds
-          # Start a script that would potentially enable the stop word if the response is longer than a second
-          - script.execute: activate_stop_word_once
   on_tts_end:
     - script.execute:
         id: send_tts_uri_event
         tts_uri: !lambda 'return x;'
+    - script.execute:
+        id: play_on_external_speaker
+        url: !lambda 'return x;'
+    # Enable the stop word only after this reply starts, not for the wake chime.
+    - script.execute: activate_stop_word_once
   on_stt_end:
     - script.execute:
         id: send_stt_text_event
@@ -344,11 +318,6 @@ voice_assistant:
     - wait_until:
         not:
           voice_assistant.is_running:
-    # Stop ducking audio.
-    - mixer_speaker.apply_ducking:
-        id: media_mixing_input
-        decibel_reduction: 0
-        duration: 1.0s
     # If the end happened because of an error, let the error phase on for a second
     - if:
         condition:
@@ -406,50 +375,120 @@ voice_assistant:
         }
 
 script:
-  # Script executed when we want to play sounds on the device.
+  # Clears external_playback_active if the player never reports idle.
+  # Started with execute() from a lambda so the caller does not wait out the delay.
+  - id: clear_playback_flag_later
+    mode: restart
+    then:
+      - delay: 90s
+      - lambda: |-
+          id(external_playback_active) = false;
+          id(external_playback_seen_active) = false;
+
+  # Play a URL on the configured Home Assistant media player.
+  - id: play_on_external_speaker
+    parameters:
+      url: string
+    then:
+      - if:
+          condition:
+            lambda: return !url.empty();
+          then:
+            - lambda: |-
+                id(external_playback_seen_active) = false;
+                id(external_playback_active) = true;
+                id(clear_playback_flag_later).execute();
+            - homeassistant.action:
+                action: media_player.play_media
+                data:
+                  entity_id: ${external_speaker}
+                  media_content_id: !lambda 'return url;'
+                  media_content_type: music
+                  announce: "true"
+
+  # Stop whatever the external speaker is announcing.
+  - id: stop_external_speaker
+    then:
+      - homeassistant.action:
+          action: media_player.media_stop
+          data:
+            entity_id: ${external_speaker}
+      - lambda: |-
+          id(external_playback_active) = false;
+          id(external_playback_seen_active) = false;
+          id(clear_playback_flag_later).stop();
+
+  # Play one of the named notification sounds on the external speaker.
+  # priority stops the current sound first. Otherwise a sound that is already
+  # playing is left alone.
   - id: play_sound
     parameters:
       priority: bool
-      # sound_file: "audio::AudioFile*"
       sound_file: string
     then:
       - if:
           condition:
-            lambda: return priority;
+            lambda: return priority || !id(external_playback_active);
           then:
-            - media_player.stop:
-                id: external_media_player
-                announcement: true
-      - lambda: |-
-          if ( (id(external_media_player).state != media_player::MediaPlayerState::MEDIA_PLAYER_STATE_ANNOUNCING ) || priority) {
-            id(external_media_player)
-              ->make_call()
-              .set_media_url("audio-file://" + sound_file)
-              .set_announcement(true)
-              .perform();
-          }
+            - if:
+                condition:
+                  lambda: return priority && id(external_playback_active);
+                then:
+                  - script.execute: stop_external_speaker
+            - if:
+                condition:
+                  lambda: return sound_file == "mute_switch_on_sound";
+                then:
+                  - script.execute:
+                      id: play_on_external_speaker
+                      url: "${mute_switch_on_sound_file}"
+            - if:
+                condition:
+                  lambda: return sound_file == "mute_switch_off_sound";
+                then:
+                  - script.execute:
+                      id: play_on_external_speaker
+                      url: "${mute_switch_off_sound_file}"
+            - if:
+                condition:
+                  lambda: return sound_file == "timer_finished_sound";
+                then:
+                  - script.execute:
+                      id: play_on_external_speaker
+                      url: "${timer_finished_sound_file}"
+            - if:
+                condition:
+                  lambda: return sound_file == "wake_word_triggered_sound";
+                then:
+                  - script.execute:
+                      id: play_on_external_speaker
+                      url: "${wake_word_triggered_sound_file}"
+            - if:
+                condition:
+                  lambda: return sound_file == "error_cloud_expired";
+                then:
+                  - script.execute:
+                      id: play_on_external_speaker
+                      url: "${error_cloud_expired_sound_file}"
 
-  # Script used activate the stop word if the TTS step is long.
-  # Why is this wrapped on a script?
-  #   Becasue we want to stop the sequence if the TTS step is faster than that.
-  #   This allows us to prevent having the deactivation of the stop word before its own activation.
+  # Enable the stop word while the external speaker is playing a TTS reply.
+  # Wrapped in a script so a short reply can finish before the stop word arms,
+  # and so a newer reply restarts the wait instead of disabling the model early.
   - id: activate_stop_word_once
+    mode: restart
     then:
-      - wait_until:
-          condition:
-            media_player.is_announcing:
-              id: external_media_player
       - delay: 1s
-      # Enable stop wake word
       - if:
           condition:
-            switch.is_off: timer_ringing
+            and:
+              - switch.is_off: timer_ringing
+              - lambda: return id(external_playback_active);
           then:
             - micro_wake_word.enable_model: stop
             - wait_until:
-                not:
-                  media_player.is_announcing:
-                    id: external_media_player
+                condition:
+                  lambda: return !id(external_playback_active);
+                timeout: 90s
             - if:
                 condition:
                   switch.is_off: timer_ringing

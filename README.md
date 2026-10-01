@@ -4,13 +4,13 @@ ESPHome components and configuration packages that make a
 [reSpeaker XVF3800 USB 4-Mic Array](https://github.com/respeaker/reSpeaker_XVF3800_USB_4MIC_ARRAY)
 into a Home Assistant voice satellite.
 
-The board has three parts. This project drives all of them:
+The board has an ESP32-S3 and an XMOS XVF3800. This project drives both. Playback goes to a Home Assistant media player.
 
 | Part | Function | Component |
 | --- | --- | --- |
 | ESP32-S3 | Host. Runs ESPHome. | ESPHome core |
 | XMOS XVF3800 | Audio DSP. Beam forming, mute, LED ring. | `respeaker_xvf3800` |
-| TLV320AIC3104 | Audio codec. | `aic3104` |
+| Home Assistant media player | Plays TTS and notification sounds. | `external_speaker` substitution |
 
 > **Warning:** This project is under development. Use it at your own risk.
 > Test reports are welcome.
@@ -36,7 +36,6 @@ The device gives these entities to Home Assistant:
 | Firmware Version | text sensor | Shows the XMOS DSP firmware version |
 | Current device time | text sensor | Shows the device clock |
 | Next timer, Next timer name | sensor, text sensor | Show the first active timer |
-| Media Player | media player | Plays announcements and media |
 | Restart, Factory Reset | button | Restart and factory reset |
 
 The **LED Ring** light controls the 12-LED ring. Read
@@ -82,6 +81,8 @@ substitutions:
   name: respeaker-xvf3800-assistant
   friendly_name: reSpeaker XVF3800 Assistant
   respeaker_ref: main
+  # Entity id of the Home Assistant speaker that plays replies and sounds.
+  external_speaker: media_player.wohnzimmer
 
 packages:
   respeaker:
@@ -142,6 +143,7 @@ substitution in a package.
 | `name` | `respeaker-xvf3800-assistant` | ESPHome node name |
 | `friendly_name` | `reSpeaker XVF3800 Assistant` | Display name |
 | `respeaker_ref` | `main` | Ref for the packages, the components, and the firmware |
+| `external_speaker` | `media_player.wohnzimmer` | Home Assistant media player for TTS and sounds |
 | `i2s_audio_ref` | `respeaker_microphone` | Ref for the patched `i2s_audio` fork |
 | `hidden_ssid` | `"false"` | Set this to `"true"` for a hidden network |
 | `log_level` | `INFO` | Logger level |
@@ -230,8 +232,8 @@ fully reproducible build.
 | Package | Contents |
 | --- | --- |
 | `base.yaml` | `esphome`, `esp32`, `psram`, `logger`, `network`, `wifi`, `api`, `i2c`, `debug`, `external_components` |
-| `hardware.yaml` | `i2s_audio`, `microphone`, `speaker`, `audio_dac`, `respeaker_xvf3800` with the DFU firmware |
-| `voice-assistant.yaml` | `micro_wake_word`, `voice_assistant`, `media_player`, `media_source`, `audio_file` |
+| `hardware.yaml` | `i2s_audio`, `microphone`, `respeaker_xvf3800` with the DFU firmware |
+| `voice-assistant.yaml` | `micro_wake_word`, `voice_assistant`, playback on `external_speaker` |
 | `leds.yaml` | LED globals, the animation interval, the effect scripts, the colour preset |
 | `timers-alarm.yaml` | `time`, `datetime`, the alarm and timer entities, the timer scripts |
 
@@ -298,23 +300,29 @@ triggers.
 | `esphome.stt_text` | `text` | Speech to text gives a result |
 | `esphome.tts_uri` | `uri` | Text to speech gives a response URL |
 
-### Play the response on an external speaker
+### External speaker
 
-You can trigger an automation on `esphome.tts_uri` and send the `uri` to another
-speaker, for example a Sonos. This works, but you must know three limits first.
+Set `external_speaker` to a Home Assistant `media_player` entity id. The device
+plays text to speech, the wake chime, the mute sounds, and the timer on that
+player. Changing the entity id needs a new firmware upload.
 
-Set the conversation agent to ask no follow-up questions. An external speaker
-gives no echo signal to the XVF3800 canceller. If the agent sets
-`continue_conversation`, the microphone stays open, and the device can hear its
-own response as a new command.
+The player must be able to fetch the URL. Text to speech URLs come from Home
+Assistant. Notification sounds come from the `*_sound_file` substitutions.
 
-The local media player still gets the same URL. It downloads the audio and it
-decodes the audio a second time. To stop this path, add
-`voice_assistant: media_player: !remove` to your configuration. To hide the
-entity from Home Assistant, set `internal: true` on `external_media_player`.
+The device also sends `esphome.tts_uri` with the same URL. Do not play that URL
+again from an automation, or the reply is heard twice.
 
-The stop word gets its timing from the **local** announcement state. So the stop
-word can start late, or stop early, when the audio plays on an external speaker.
+The XVF3800 gets no echo reference from this player. Turn off follow-up
+questions on the conversation agent. While a sound is playing, wake words other
+than "stop" do not start a new command.
+
+`assist_satellite.announce` does not reach this device. Timers and the alarm
+play their sound from the device itself.
+
+"Stop" is armed one second after a reply starts. It is cleared when the player
+reports `idle`, `off`, `paused`, or `standby`, or after 90 seconds if the
+player never leaves its current state. Players that keep reporting `playing`
+during an announcement use that 90 second limit.
 
 ---
 
@@ -369,8 +377,8 @@ The light keeps the largest colour component at full, and moves the level to the
 brightness axis. The hue stays the same. So `set_led_color` with `(128, 64, 0)`
 reads back as `(255, 128, 0)` at half brightness.
 
-A volume change or a mute change shows the volume for 2 seconds. The light
-returns after that.
+A volume change or a mute change on the external speaker shows the volume for
+2 seconds. The light returns after that.
 
 ### Beam direction
 
@@ -398,7 +406,7 @@ external_components:
   - source:
       type: local
       path: esphome/components
-    components: [respeaker_xvf3800, aic3104]
+    components: [respeaker_xvf3800]
 ```
 
 Do not commit this change.
@@ -436,8 +444,8 @@ needs about two seconds to boot. The component waits for this.
 **The startup stops at the firmware version read.** The DSP does not answer.
 Power the board off and on. Then read the logs at `DEBUG` level.
 
-**There is no audio.** Check that the `aic3104` codec is at address 0x18 in the
-I2C scan. Check that the media player volume is not zero.
+**There is no audio.** Check `external_speaker`. The player must be on, and it
+must be able to fetch the URL Home Assistant sends.
 
 **The wake word does not start the pipeline.** Check that the microphone is not
 muted. Lower the value of the **Wake word sensitivity** select.
@@ -445,10 +453,10 @@ muted. Lower the value of the **Wake word sensitivity** select.
 **The build uses old package files.** ESPHome caches a remote package for the
 `refresh` time. Set `refresh: 0s` while you test.
 
-**The response plays many seconds late.** Home Assistant sends the text to
-speech audio while the engine still makes it. So a slow engine gives a slow
-download. Test with a static audio file on the same host. If the static file is
-fast, the cause is the engine. Use a local text to speech engine to make the
+**The response plays many seconds late.** The external speaker downloads the
+text to speech file while the engine is still making it. A slow engine gives a
+slow start. Test with a static audio file on the same host. If the static file
+is fast, the cause is the engine. Use a local text to speech engine to make the
 delay smaller.
 
 **The LED ring stays off.** The `control_leds` script did not run. Check the
@@ -460,7 +468,8 @@ connection to Home Assistant, because the LED state follows the API state.
 
 1. The board has no buttons. So you can only stop a timer or a response when you
    say "stop". You cannot start the pipeline by hand.
-2. There is no hardware volume control. Only the software volume works.
+2. There is no hardware volume control. Volume is the external media player's
+   volume. The ring shows it when that player changes volume or mute.
 
 ---
 

@@ -382,9 +382,9 @@ script:
           constexpr int NUM_LEDS = 12;
           uint32_t colors[NUM_LEDS] = {0};
 
-          if (id(external_media_player).is_ready()) {
-            bool is_muted = id(external_media_player).is_muted();
-            float volume = id(external_media_player).volume;
+          if (id(external_speaker_volume).has_state()) {
+            bool is_muted = id(external_speaker_muted).state;
+            float volume = id(external_speaker_volume).state;
 
             if (is_muted || volume == 0.0f) {
               uint32_t mute_color = (255 << 16); // Red
