@@ -291,14 +291,13 @@ value and restores it at the next boot.
 
 ### Events
 
-The device sends three events to Home Assistant. Use them as automation
+The device sends two events to Home Assistant. Use them as automation
 triggers.
 
 | Event | Data | Sent when |
 | --- | --- | --- |
 | `esphome.wake_word_detected` | `wake_word` | The device detects a wake word |
 | `esphome.stt_text` | `text` | Speech to text gives a result |
-| `esphome.tts_uri` | `uri` | Text to speech gives a response URL |
 
 ### External speaker
 
@@ -308,9 +307,6 @@ player. Changing the entity id needs a new firmware upload.
 
 The player must be able to fetch the URL. Text to speech URLs come from Home
 Assistant. Notification sounds come from the `*_sound_file` substitutions.
-
-The device also sends `esphome.tts_uri` with the same URL. Do not play that URL
-again from an automation, or the reply is heard twice.
 
 The XVF3800 gets no echo reference from this player. Turn off follow-up
 questions on the conversation agent. While a sound is playing, wake words other

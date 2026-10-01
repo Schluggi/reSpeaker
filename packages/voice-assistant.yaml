@@ -298,9 +298,6 @@ voice_assistant:
           - script.execute: control_leds
   on_tts_end:
     - script.execute:
-        id: send_tts_uri_event
-        tts_uri: !lambda 'return x;'
-    - script.execute:
         id: play_on_external_speaker
         url: !lambda 'return x;'
     # Enable the stop word only after this reply starts, not for the wake chime.
@@ -404,7 +401,6 @@ script:
                   entity_id: ${external_speaker}
                   media_content_id: !lambda 'return url;'
                   media_content_type: music
-                  announce: "true"
 
   # Stop whatever the external speaker is announcing.
   - id: stop_external_speaker
@@ -508,14 +504,6 @@ script:
     then:
       - homeassistant.event:
           event: esphome.alarm_ringing
-  - id: send_tts_uri_event
-    parameters:
-      tts_uri: string
-    then:
-      - homeassistant.event:
-          event: esphome.tts_uri
-          data:
-            uri: !lambda return tts_uri;
   - id: send_stt_text_event
     parameters:
       stt_text: string
