@@ -1,0 +1,16 @@
+---
+description: Keep AGENTS.md current when project architecture changes
+alwaysApply: true
+---
+
+# Keep AGENTS.md current
+
+When you change any of the following, update [AGENTS.md](AGENTS.md) in the **same** change:
+
+- Packages under `packages/`
+- Components under `esphome/components/`
+- External speaker / TTS playback path (`external_announce`, `play_on_external_speaker`, announce/ducking, Responding lifecycle)
+- Commands, local test harness, or `${respeaker_ref}` / external_components wiring
+- Layout or architecture that agents need to know
+
+Do not leave outdated claims in `AGENTS.md`. Prefer short, actionable updates over long prose. `AGENTS.md` is the Cursor source of truth; do not rely on `CLAUDE.md` alone.
