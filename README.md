@@ -86,7 +86,7 @@ substitutions:
 
 packages:
   respeaker:
-    url: https://github.com/formatBCE/Respeaker-XVF3800-ESPHome-integration
+    url: https://github.com/schluggi/reSpeaker
     ref: ${respeaker_ref}
     refresh: 1d
     files:

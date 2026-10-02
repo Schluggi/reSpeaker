@@ -14,6 +14,9 @@ substitutions:
   friendly_name: reSpeaker XVF3800 Assistant
 
   # --- Source refs ---------------------------------------------------------
+  # Repository that holds the C++ components and the DFU firmware. It must be
+  # the same repository as the packages, so a new component is found.
+  respeaker_repo: https://github.com/schluggi/reSpeaker
   # Ref of this repository. It selects the C++ components and the DFU firmware.
   # Set it to the same tag or commit that you use for the packages themselves.
   respeaker_ref: main
@@ -212,7 +215,7 @@ external_components:
     refresh: 0s
   - source:
       type: git
-      url: https://github.com/formatBCE/Respeaker-XVF3800-ESPHome-integration
+      url: ${respeaker_repo}
       ref: ${respeaker_ref}
     components:
       - respeaker_xvf3800
