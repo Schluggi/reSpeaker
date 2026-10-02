@@ -24,6 +24,20 @@ microphone:
     i2s_audio_id: i2s_input
     channel: stereo
 
+# Room loudness from the I2S stream the wake word already keeps open.
+# Channel 0 is the lr48 ASR output: beamformed, without AGC or noise
+# suppression. passive keeps this sensor from starting or stopping the mic.
+sensor:
+  - platform: sound_level
+    microphone:
+      microphone: i2s_mics
+      channels: 0
+    passive: true
+    measurement_duration: 1s
+    rms:
+      name: "Room Loudness"
+      icon: mdi:volume-high
+
 respeaker_xvf3800:
   id: respeaker
   address: 0x2C

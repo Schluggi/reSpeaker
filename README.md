@@ -34,9 +34,14 @@ The device gives these entities to Home Assistant:
 | LED Ring Color Preset | select | Selects the LED ring colour |
 | LED Ring | light | Sets the LED ring colour, the brightness and the idle effect |
 | Firmware Version | text sensor | Shows the XMOS DSP firmware version |
+| Room Loudness | sensor | 1-second RMS of the microphone, in dBFS |
 | Current device time | text sensor | Shows the device clock |
 | Next timer, Next timer name | sensor, text sensor | Show the first active timer |
 | Restart, Factory Reset | button | Restart and factory reset |
+
+**Room Loudness** is the level of I2S channel 0. The unit is dBFS: 0 is full
+scale, and a typical room sits below that. It is not a calibrated dB(A)
+reading. The sensor publishes only while the microphone stream is running.
 
 The **LED Ring** light controls the 12-LED ring. Read
 [LED effects](#led-effects) for more information.
@@ -232,7 +237,7 @@ fully reproducible build.
 | Package | Contents |
 | --- | --- |
 | `base.yaml` | `esphome`, `esp32`, `psram`, `logger`, `network`, `wifi`, `api`, `i2c`, `debug`, `external_components` |
-| `hardware.yaml` | `i2s_audio`, `microphone`, `respeaker_xvf3800` with the DFU firmware |
+| `hardware.yaml` | `i2s_audio`, `microphone`, room loudness, `respeaker_xvf3800` with the DFU firmware |
 | `voice-assistant.yaml` | `micro_wake_word`, `voice_assistant`, playback on `external_speaker` |
 | `leds.yaml` | LED globals, the animation interval, the effect scripts, the colour preset |
 | `timers-alarm.yaml` | `time`, `datetime`, the alarm and timer entities, the timer scripts |
