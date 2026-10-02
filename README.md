@@ -311,10 +311,16 @@ Set `external_speaker` to a Home Assistant `media_player` entity id. The device
 plays text to speech, the wake chime, the mute sounds, and the timer on that
 player. Changing the entity id needs a new firmware upload.
 
-Each sound is one normal playback. It replaces whatever the player is playing
-for the length of the file. The device does not send `announce: true`: that
-flag makes the player start the same file again, so a reply is spoken more
-than once. This device does not change the volume itself.
+Those sounds are sent as announcements (`announce: true`). A player that can
+duck keeps the current music playing and only lowers it. How far it ducks is
+the player's own setting (on Music Assistant, the player's announcement
+volume). This device does not change the volume itself.
+
+Only players with a native announcement path do that overlay. With Music
+Assistant those are Sonos S2, Sendspin, and Snapcast. Other players that
+support announcements pause the music and resume it afterwards. A player
+without announcement support still replaces the current media: the sound
+plays, and the music does not come back.
 
 The player must be able to fetch the URL. Text to speech URLs come from Home
 Assistant. Notification sounds come from the `*_sound_file` substitutions.
@@ -339,8 +345,8 @@ If it never reports `playing` or `buffering`, the device stops waiting after
 `external_speaker_start_timeout` (10 seconds by default). Wake words work again
 after that. Override the substitution when text to speech takes longer to start.
 A player that is already `playing` or `buffering` at that timeout counts as
-started, and the 90 second limit above applies. That is the case where the
-player was already playing and the new file does not change the state.
+started, and the 90 second limit above applies. That is the ducked-music case,
+where the state never changes.
 
 ---
 
