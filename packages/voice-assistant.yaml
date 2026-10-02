@@ -243,6 +243,8 @@ media_player:
       - script.execute:
           id: play_on_external_speaker
           url: !lambda 'return x;'
+          # Duck music under TTS / assist_satellite.announce.
+          announce: "true"
     on_stop:
       - script.execute: stop_external_speaker
 
@@ -467,10 +469,16 @@ script:
   # restart: a second URL (preannounce, then the announcement) replaces one
   # that has not been sent yet instead of being dropped. The same URL while
   # playback is already active is ignored.
+  #
+  # announce is a string ("true" / "false"): ESPHome sends action data as
+  # strings. "true" ducks music on players that support announcements. Wake
+  # and other short notification sounds use "false": with "true" some players
+  # play the same short file twice.
   - id: play_on_external_speaker
     mode: restart
     parameters:
       url: string
+      announce: string
     then:
       - if:
           condition:
@@ -482,7 +490,7 @@ script:
                     return id(external_playback_active) && url == id(external_playback_url);
                 then:
                   - lambda: |-
-                      ESP_LOGD("external_speaker", "Ignoring duplicate URL while playback is active");
+                      ESP_LOGW("external_speaker", "Ignoring duplicate URL while playback is active");
                 else:
                   - if:
                       condition:
@@ -500,16 +508,14 @@ script:
                             id(external_playback_url) = url;
                             id(clear_playback_flag_later).execute();
                             id(abort_if_speaker_never_starts).execute();
+                            ESP_LOGD("external_speaker", "play_media announce=%s url=%s", announce.c_str(), url.c_str());
                         - homeassistant.action:
                             action: media_player.play_media
                             data:
                               entity_id: ${external_speaker}
                               media_content_id: !lambda 'return url;'
                               media_content_type: music
-                              # String, not a YAML bool: ESPHome sends action data as
-                              # strings. Home Assistant reads "true" as an announcement,
-                              # so a player that can duck keeps the current music going.
-                              announce: "true"
+                              announce: !lambda 'return announce;'
           else:
             - lambda: id(external_announce_player).finish();
 
@@ -530,7 +536,9 @@ script:
 
   # Play one of the named notification sounds on the external speaker.
   # priority stops the current sound first. Otherwise a sound that is already
-  # playing is left alone.
+  # playing is left alone. announce is false so short chimes are not played
+  # twice by announcement-capable players (trade-off: music is replaced for
+  # the length of the chime instead of ducked).
   - id: play_sound
     parameters:
       priority: bool
@@ -552,6 +560,7 @@ script:
                   - script.execute:
                       id: play_on_external_speaker
                       url: "${mute_switch_on_sound_file}"
+                      announce: "false"
             - if:
                 condition:
                   lambda: return sound_file == "mute_switch_off_sound";
@@ -559,6 +568,7 @@ script:
                   - script.execute:
                       id: play_on_external_speaker
                       url: "${mute_switch_off_sound_file}"
+                      announce: "false"
             - if:
                 condition:
                   lambda: return sound_file == "timer_finished_sound";
@@ -566,6 +576,7 @@ script:
                   - script.execute:
                       id: play_on_external_speaker
                       url: "${timer_finished_sound_file}"
+                      announce: "false"
             - if:
                 condition:
                   lambda: return sound_file == "wake_word_triggered_sound";
@@ -573,6 +584,7 @@ script:
                   - script.execute:
                       id: play_on_external_speaker
                       url: "${wake_word_triggered_sound_file}"
+                      announce: "false"
             - if:
                 condition:
                   lambda: return sound_file == "error_cloud_expired";
@@ -580,6 +592,7 @@ script:
                   - script.execute:
                       id: play_on_external_speaker
                       url: "${error_cloud_expired_sound_file}"
+                      announce: "false"
 
   # Enable the stop word while the external speaker is playing a TTS reply.
   # Wrapped in a script so a short reply can finish before the stop word arms,

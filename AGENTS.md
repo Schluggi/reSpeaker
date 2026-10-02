@@ -80,8 +80,11 @@ this board.
 ```
 voice_assistant.media_player
   → external_announce_player (platform: external_announce)
-  → on_announcement → play_on_external_speaker
+  → on_announcement → play_on_external_speaker (announce: "true")
   → homeassistant.action media_player.play_media on ${external_speaker}
+
+play_sound (wake / mute / timer / error)
+  → play_on_external_speaker (announce: "false")
 ```
 
 While `external_announce_player` is `ANNOUNCING`, the Assist satellite stays
@@ -90,10 +93,13 @@ moves it back to Idle and sends AnnounceFinished.
 
 Hard constraints — do not break either without an intentional replacement:
 
-1. **`announce: "true"`** on `play_on_external_speaker` (string, not YAML bool).
-   ESPHome sends action data as strings. Without the flag, the player replaces
-   current media and music stops. With it, players that support announcements
-   duck music (Music Assistant: Sonos S2, Sendspin, Snapcast).
+1. **`announce` is a script parameter** on `play_on_external_speaker` (string
+   `"true"` / `"false"`, not a YAML bool — ESPHome sends action data as strings).
+   TTS / `on_announcement` uses `"true"` so players that support announcements
+   duck music (Music Assistant: Sonos S2, Sendspin, Snapcast). Notification
+   sounds from `play_sound` use `"false"`: with `"true"`, some announcement
+   players play a short file twice. Trade-off: short chimes replace music for
+   their duration instead of ducking.
 2. **URL dedupe** in `ExternalAnnounceMediaPlayer::control()`: while
    `ANNOUNCING`, ignore another play URL that is the same as the current one, or
    any non-`ENQUEUE` play. A different `ENQUEUE` URL (preannounce → announcement)
