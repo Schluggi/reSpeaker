@@ -114,6 +114,7 @@ text_sensor:
             id(external_playback_seen_active) = false;
             id(clear_playback_flag_later).stop();
             id(abort_if_speaker_never_starts).stop();
+            id(external_announce_player).finish();
             return;
           }
           if (x == "playing" || x == "buffering") {
@@ -127,6 +128,7 @@ text_sensor:
             id(external_playback_seen_active) = false;
             id(clear_playback_flag_later).stop();
             id(abort_if_speaker_never_starts).stop();
+            id(external_announce_player).finish();
           }
 
 sensor:
@@ -236,11 +238,26 @@ micro_wake_word:
                                 then:
                                   - lambda: id(respeaker).lock_beam();
 
+# Lets voice_assistant track reply playback. The player itself is silent;
+# on_announcement hands the URL to the external Home Assistant speaker.
+# While it reports ANNOUNCING, the satellite stays in Responding.
+media_player:
+  - platform: external_announce
+    id: external_announce_player
+    internal: true
+    on_announcement:
+      - script.execute:
+          id: play_on_external_speaker
+          url: !lambda 'return x;'
+    on_stop:
+      - script.execute: stop_external_speaker
+
 voice_assistant:
   id: va
   microphone:
     microphone: i2s_mics
     channels: 0
+  media_player: external_announce_player
   micro_wake_word: mww
   use_wake_word: false
   noise_suppression_level: 0
@@ -297,8 +314,8 @@ voice_assistant:
   on_intent_progress:
     - if:
         condition:
-          # Without a local media player this URL stays empty. The replying
-          # phase is set from on_tts_start instead.
+          # Streaming TTS sends the URL here and the announcement player
+          # starts playback. This only moves the LED phase.
           lambda: 'return !x.empty();'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
@@ -311,9 +328,8 @@ voice_assistant:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
           - script.execute: control_leds
   on_tts_end:
-    - script.execute:
-        id: play_on_external_speaker
-        url: !lambda 'return x;'
+    # Playback starts from external_announce_player.on_announcement, including
+    # when streaming TTS already handed the URL over at intent progress.
     # Enable the stop word only after this reply starts, not for the wake chime.
     - script.execute: activate_stop_word_once
   on_stt_end:
@@ -395,6 +411,7 @@ script:
       - lambda: |-
           id(external_playback_active) = false;
           id(external_playback_seen_active) = false;
+          id(external_announce_player).finish();
 
   # Gives up when playback never starts. A player that is already playing
   # (music ducked under the announcement) counts as started and still uses
@@ -420,9 +437,13 @@ script:
                 id(external_playback_active) = false;
                 id(external_playback_seen_active) = false;
                 id(clear_playback_flag_later).stop();
+                id(external_announce_player).finish();
 
   # Play a URL on the configured Home Assistant media player.
+  # restart: a second URL (preannounce, then the announcement) replaces one
+  # that has not been sent yet instead of being dropped.
   - id: play_on_external_speaker
+    mode: restart
     parameters:
       url: string
     then:
@@ -438,6 +459,7 @@ script:
                 then:
                   - lambda: |-
                       ESP_LOGW("external_speaker", "External speaker not reachable (%s)", id(external_speaker_state).state.c_str());
+                      id(external_announce_player).finish();
                 else:
                   - lambda: |-
                       id(external_playback_seen_active) = false;
@@ -454,6 +476,8 @@ script:
                         # strings. Home Assistant reads "true" as an announcement,
                         # so a player that can duck keeps the current music going.
                         announce: "true"
+          else:
+            - lambda: id(external_announce_player).finish();
 
   # Stop whatever the external speaker is announcing.
   - id: stop_external_speaker
@@ -467,6 +491,7 @@ script:
           id(external_playback_seen_active) = false;
           id(clear_playback_flag_later).stop();
           id(abort_if_speaker_never_starts).stop();
+          id(external_announce_player).finish();
 
   # Play one of the named notification sounds on the external speaker.
   # priority stops the current sound first. Otherwise a sound that is already

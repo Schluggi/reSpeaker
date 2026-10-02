@@ -216,6 +216,7 @@ external_components:
       ref: ${respeaker_ref}
     components:
       - respeaker_xvf3800
+      - external_announce
     refresh: 0s
 
 select:

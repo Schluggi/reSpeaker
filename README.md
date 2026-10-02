@@ -323,13 +323,16 @@ The XVF3800 gets no echo reference from this player. Turn off follow-up
 questions on the conversation agent. While a sound is playing, wake words other
 than "stop" do not start a new command.
 
-`assist_satellite.announce` does not reach this device. Timers and the alarm
-play their sound from the device itself.
+The Assist satellite stays in Responding while a reply or an announcement
+plays. It returns to Idle when that playback ends. `assist_satellite.announce`
+plays on the external speaker. Timers and the alarm play their sound from the
+device itself.
 
-"Stop" is armed one second after a reply starts. It is cleared when the player
+"Stop" is armed one second after a reply starts. Playback ends when the player
 reports `idle`, `off`, `paused`, or `standby`, or after 90 seconds if the
 player never leaves its current state. Players that keep reporting `playing`
-during an announcement use that 90 second limit.
+during an announcement use that 90 second limit. The satellite leaves
+Responding at that same moment.
 
 If the player is already `unavailable` or `unknown`, the device does not wait.
 If it never reports `playing` or `buffering`, the device stops waiting after
@@ -421,7 +424,7 @@ external_components:
   - source:
       type: local
       path: esphome/components
-    components: [respeaker_xvf3800]
+    components: [respeaker_xvf3800, external_announce]
 ```
 
 Do not commit this change.
