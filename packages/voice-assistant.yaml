@@ -396,7 +396,8 @@ script:
           id(external_playback_active) = false;
           id(external_playback_seen_active) = false;
 
-  # Gives up when playback never starts. A player that does start still uses
+  # Gives up when playback never starts. A player that is already playing
+  # (music ducked under the announcement) counts as started and still uses
   # the 90s watchdog above. Started with execute() so the caller does not wait.
   - id: abort_if_speaker_never_starts
     mode: restart
@@ -407,6 +408,14 @@ script:
             lambda: return id(external_playback_active) && !id(external_playback_seen_active);
           then:
             - lambda: |-
+                auto state = id(external_speaker_state).state;
+                // Ducking players stay "playing" while music continues under
+                // the announcement, so there is no new playing edge. Keep the
+                // 90s watchdog; it is the only end signal in that case.
+                if (state == "playing" || state == "buffering") {
+                  id(external_playback_seen_active) = true;
+                  return;
+                }
                 ESP_LOGW("external_speaker", "External speaker did not start playback");
                 id(external_playback_active) = false;
                 id(external_playback_seen_active) = false;
@@ -441,6 +450,10 @@ script:
                         entity_id: ${external_speaker}
                         media_content_id: !lambda 'return url;'
                         media_content_type: music
+                        # String, not a YAML bool: ESPHome sends action data as
+                        # strings. Home Assistant reads "true" as an announcement,
+                        # so a player that can duck keeps the current music going.
+                        announce: "true"
 
   # Stop whatever the external speaker is announcing.
   - id: stop_external_speaker
