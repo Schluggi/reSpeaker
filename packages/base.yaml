@@ -241,5 +241,11 @@ button:
     disabled_by_default: true
     icon: "mdi:restart"
 
+sensor:
+  - platform: uptime
+    id: uptime_sensor
+    name: "Uptime"
+    entity_category: diagnostic
+
 debug:
   update_interval: 5s

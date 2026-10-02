@@ -35,6 +35,7 @@ The device gives these entities to Home Assistant:
 | LED Ring | light | Sets the LED ring colour, the brightness and the idle effect |
 | Firmware Version | text sensor | Shows the XMOS DSP firmware version |
 | Room Loudness | sensor | 1-second RMS of the microphone, in dBFS |
+| Uptime | sensor | Time since the last start |
 | Current device time | text sensor | Shows the device clock |
 | Next timer, Next timer name | sensor, text sensor | Show the first active timer |
 | Restart, Factory Reset | button | Restart and factory reset |
@@ -175,8 +176,8 @@ substitutions:
 
 ```yaml
 sensor:
-  - platform: uptime
-    name: "Uptime"
+  - platform: wifi_signal
+    name: "WiFi Signal"
 ```
 
 **Add steps to a script.** Use `!extend`. The new steps go after the existing
