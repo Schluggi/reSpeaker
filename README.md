@@ -26,6 +26,7 @@ The device gives these entities to Home Assistant:
 | Microphone Mute | switch | Mutes the microphone array in the DSP |
 | Mute-unmute sound | switch | Plays a sound when you mute the microphone |
 | Wake sound | switch | Plays a sound when the wake word starts the pipeline |
+| Text to speech | switch | Speaks pipeline replies and announcements |
 | Beam lock | switch | Locks the microphone beam during one utterance |
 | Alarm on | switch | Turns the alarm clock on |
 | Alarm time | datetime | Sets the alarm time |
@@ -332,6 +333,11 @@ Assistant. Notification sounds come from the `*_sound_file` substitutions.
 The XVF3800 gets no echo reference from this player. Turn off follow-up
 questions on the conversation agent. While a sound is playing, wake words other
 than "stop" do not start a new command.
+
+Turn **Text to speech** off when you do not want to hear replies. The command
+still runs. The device skips the spoken reply and `assist_satellite.announce`,
+then returns to Idle at once. Wake, mute, timer, and error sounds still play.
+The switch is on after a first install and keeps your choice across restarts.
 
 The Assist satellite stays in Responding while a reply or an announcement
 plays. It returns to Idle when that playback ends. `assist_satellite.announce`

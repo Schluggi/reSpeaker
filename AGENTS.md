@@ -113,6 +113,11 @@ Hard constraints — do not break either without an intentional replacement:
    `external_playback_active` and the URL equals `external_playback_url`, do not
    call Home Assistant again. Clear `external_playback_url` when playback ends
    or is stopped.
+5. **`tts_enabled`** gates `on_announcement` only. Off calls `finish()`
+   immediately (control() has already published `ANNOUNCING`) and skips
+   `play_on_external_speaker`. Pipeline replies and `assist_satellite.announce`
+   stay silent; the satellite leaves Responding. `play_sound` (wake, mute,
+   timer, error) does not read the switch.
 
 Wake sounds and timers share the playback scripts; `finish()` is a no-op unless
 the player is announcing, so those paths do not clear Responding incorrectly.

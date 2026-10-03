@@ -54,6 +54,16 @@ switch:
     entity_category: config
     optimistic: true
     restore_mode: RESTORE_DEFAULT_OFF
+  # Spoken replies and assist_satellite.announce. Off skips playback and
+  # finishes the announcement immediately so the satellite returns to Idle.
+  # Notification sounds (wake, mute, timer, error) are unaffected.
+  - platform: template
+    id: tts_enabled
+    name: Text to speech
+    icon: "mdi:account-voice"
+    entity_category: config
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
 
 select:
   - platform: template
@@ -240,11 +250,20 @@ media_player:
     id: external_announce_player
     internal: true
     on_announcement:
-      - script.execute:
-          id: play_on_external_speaker
-          url: !lambda 'return x;'
-          # Duck music under TTS / assist_satellite.announce.
-          announce: "true"
+      # Spoken replies and assist_satellite.announce. When TTS is off, finish
+      # immediately: control() has already published ANNOUNCING, so finish()
+      # sends AnnounceFinished and the satellite leaves Responding.
+      - if:
+          condition:
+            switch.is_on: tts_enabled
+          then:
+            - script.execute:
+                id: play_on_external_speaker
+                url: !lambda 'return x;'
+                # Duck music under TTS / assist_satellite.announce.
+                announce: "true"
+          else:
+            - lambda: id(external_announce_player).finish();
     on_stop:
       - script.execute: stop_external_speaker
 
@@ -310,16 +329,21 @@ voice_assistant:
   on_intent_progress:
     - if:
         condition:
-          # Streaming TTS sends the URL here and the announcement player
-          # starts playback. This only moves the LED phase.
-          lambda: 'return !x.empty();'
+          and:
+            # Streaming TTS sends the URL here and the announcement player
+            # starts playback. This only moves the LED phase. With TTS off
+            # the phase stays on thinking until on_end returns to idle.
+            - switch.is_on: tts_enabled
+            - lambda: 'return !x.empty();'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
           - script.execute: control_leds
   on_tts_start:
     - if:
         condition:
-          lambda: 'return id(voice_assistant_phase) != ${voice_assist_replying_phase_id};'
+          and:
+            - switch.is_on: tts_enabled
+            - lambda: 'return id(voice_assistant_phase) != ${voice_assist_replying_phase_id};'
         then:
           - lambda: id(voice_assistant_phase) = ${voice_assist_replying_phase_id};
           - script.execute: control_leds
